@@ -1,21 +1,15 @@
-# PlymioOption
+# README
 
-**TODO: Add description**
+plymio\_option: Utility Functions for Transforming ASTs (Quoted Forms)
 
 ## Installation
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `plymio_option` to your list of dependencies in `mix.exs`:
+Add **plymio\_option** to your list of dependencies in <span class="underline">mix.exs</span>:
 
-```elixir
-def deps do
-  [
-    {:plymio_option, "~> 0.1.0"}
-  ]
-end
-```
+    def deps do
+      [{:plymio_option, "~> 0.1.0"}]
+    end
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/plymio_option](https://hexdocs.pm/plymio_option).
+## Examples
 
+See the example in the [API Reference](https://hexdocs.pm/plymio_option/api-reference.html)
