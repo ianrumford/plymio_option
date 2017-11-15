@@ -1,13 +1,13 @@
 # README
 
-plymio\_option: Utility Functions for Transforming ASTs (Quoted Forms)
+**plymio\_option**: Utility Functions for Managing (Keyword) Options
 
 ## Installation
 
 Add **plymio\_option** to your list of dependencies in <span class="underline">mix.exs</span>:
 
     def deps do
-      [{:plymio_option, "~> 0.1.0"}]
+      [{:plymio_option, "~> 0.2.0"}]
     end
 
 ## Examples
