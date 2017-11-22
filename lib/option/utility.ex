@@ -15,9 +15,13 @@ defmodule Plymio.Option.Utility do
 
   *derivable opts* is either a `Keyword` or `Map` with `Atom` keys (from which the *opts* can be *derived* simply using `Map.to_list/1`).
 
+  ### *key*
+
+  A *key* is an `Atom`.
+
   ### key list
 
-  A *key list* is a list of `Atoms`.
+  A *key list* is a list of *key*s.
 
   ### key spec
 
@@ -36,6 +40,10 @@ defmodule Plymio.Option.Utility do
   A *key alias dict* is usually a `Map` with `Atom` keys.
 
   Alternatively a `Keyword` with `Atom` values can be given and will be converted on the fly.
+
+  ### tuple predicate
+
+  A *tuple predicate* is an arity one function that when passed a `{key,value}` tuple returns `true` or `false`.
 
   ## Return Values
 
@@ -67,25 +75,6 @@ defmodule Plymio.Option.Utility do
 
   @type error :: struct
 
-  defp new_key_error(values, term) do
-
-    cond do
-      Keyword.keyword?(values) -> values |> Keyword.keys
-      is_list(values) -> values
-      true -> raise ArgumentError, message: "expected opts or keys; got: #{inspect values}"
-    end
-    |> Enum.uniq
-    |> case do
-         [key] -> %KeyError{key: key, term: term}
-         keys -> %KeyError{key: keys, term: term}
-       end
-
-  end
-
-  defp new_key_error_result(values, term) do
-    {:error, new_key_error(values, term)}
-  end
-
   defdelegate opts_take_keys(arg0,arg1), to: Keyword, as: :take
   defdelegate opts_drop_keys(arg0,arg1), to: Keyword, as: :drop
 
@@ -109,7 +98,7 @@ defmodule Plymio.Option.Utility do
   end
 
   defp normalise_key_spec(value) do
-    {:error, %ArgumentError{message: "expected enum; got: #{inspect value}"}}
+    new_error_result(m: "expected enum", v: value)
   end
 
   @spec validate_key_list(any) :: {:ok, keys} | {:error, error}
@@ -128,7 +117,7 @@ defmodule Plymio.Option.Utility do
   end
 
   defp validate_key_list(keys) do
-    {:error, %ArgumentError{message: "expected valid key list; got: #{inspect keys}"}}
+    new_error_result(m: "expected valid key list", v: keys)
   end
 
   defp normalise_key_list(keys) do
@@ -145,7 +134,7 @@ defmodule Plymio.Option.Utility do
          true <- dict |> Map.values |> Enum.all?(&is_atom/1) do
       {:ok, dict}
     else
-      false -> {:error, %ArgumentError{message: "expected valid key alias dictionary; got: #{inspect dict}"}}
+      false -> new_error_result(m: "expected valid key alias dictionary", v: dict)
     end
 
   end
@@ -162,12 +151,12 @@ defmodule Plymio.Option.Utility do
     cond do
       Keyword.keyword?(dict) -> dict |> Enum.into(%{}) |> validate_key_alias_dict
       true ->
-        {:error, %ArgumentError{message: "expected valid alias dictionary; got: #{inspect dict}"}}
+        new_error_result(m: "expected valid alias dictionary", v: dict)
     end
   end
 
   defp normalise_key_alias_dict(dict) do
-    {:error, %ArgumentError{message: "expected valid alias dictionary; got: #{inspect dict}"}}
+    new_error_result(m: "expected valid alias dictionary", v: dict)
   end
 
   @spec validate_key_dict(any) :: {:ok, aliases_dict} | {:error, error}
@@ -179,7 +168,7 @@ defmodule Plymio.Option.Utility do
     with true <- dict |> Map.keys |> Enum.all?(&is_atom/1) do
       {:ok, dict}
     else
-      false -> {:error, %ArgumentError{message: "expected valid key dictionary; got: #{inspect dict}"}}
+      false -> new_error_result(m: "expected valid key dictionary", v: dict)
     end
 
   end
@@ -196,12 +185,97 @@ defmodule Plymio.Option.Utility do
     cond do
       Keyword.keyword?(dict) -> dict |> Enum.into(%{})
       true ->
-        {:error, %ArgumentError{message: "expected valid key dictionary; got: #{inspect dict}"}}
+        new_error_result(m: "expected valid key dictionary", v: dict)
     end
   end
 
   defp normalise_key_dict(dict) do
-    {:error, %ArgumentError{message: "expected valid key dictionary; got: #{inspect dict}"}}
+    new_error_result(m: "expected valid key dictionary", v: dict)
+  end
+
+  @doc false
+
+  defp opts_index_normalise(opts, index)
+
+  defp opts_index_normalise(opts, index)
+  when is_list(opts) and is_integer(index) and index >= 0 do
+    {:ok, index}
+  end
+
+  defp opts_index_normalise(opts, index)
+  when is_list(opts) and is_integer(index) and index < 0 do
+    {:ok, length(opts) + index}
+  end
+
+  defp opts_index_normalise(opts, _index) when not is_list(opts) do
+    new_error_result(m: "opts invalid", v: opts)
+  end
+
+  defp opts_index_normalise(_opts, index) when not is_integer(index) do
+    new_error_result(m: "index invalid", v: index)
+  end
+
+  defp opts_index_validate(opts, index)
+  when is_list(opts) and is_integer(index) do
+
+    with {:ok, index} <- opts |> opts_index_normalise(index) do
+
+      index_max = length(opts) - 1
+
+      case index do
+        x when x >= 0 -> x
+        x -> index_max + x + 1
+      end
+      |> fn
+        ndx when ndx < 0 -> new_error_result(m: :index_too_small, v: ndx)
+        ndx when ndx > index_max -> new_error_result(m: :index_too_large, v: ndx)
+        ndx -> {:ok, ndx}
+      end.()
+
+    else
+      {:error, _} = result -> result
+    end
+
+  end
+
+  defp opts_index_validate(opts, _index) when not is_list(opts) do
+    new_error_result(m: "opts invalid", v: opts)
+  end
+
+  defp opts_index_validate(_opts, index) when not is_integer(index) do
+    new_error_result(m: "index invalid", v: index)
+  end
+
+  defp opts_indices_validate(opts, indices)
+
+  defp opts_indices_validate(opts, nil) do
+    {:ok, opts |> Enum.with_index |> Enum.map(&(elem(&1,1)))}
+  end
+
+  defp opts_indices_validate(opts, indices) when is_list(opts) do
+
+    indices
+    |> List.wrap
+    |> Enum.reduce({[],[]},
+    fn index, {valid_indices,invalid_indices} ->
+
+      case opts |> opts_index_validate(index) do
+        {:ok, index} -> {[index | valid_indices], invalid_indices}
+        {:error, _} -> {valid_indices, [index | invalid_indices]}
+      end
+
+    end)
+    |> case do
+         {valid_indices, []} -> {:ok, valid_indices |> Enum.reverse}
+         {_valid_indices, invalid_indices} ->
+
+           case invalid_indices |> length do
+             1 -> new_error_result(m: "index invalid", v: invalid_indices |> hd)
+             _ -> new_error_result(m: "indices invalid", v: invalid_indices |> Enum.reverse)
+           end
+
+       end
+
   end
 
   @doc ~S"""
@@ -221,7 +295,7 @@ defmodule Plymio.Option.Utility do
       {:error, %KeyError{key: "a", term: %{:b => 2, :c => 3, "a" => 1}}}
 
       iex> 42 |> opts_normalise
-      {:error, %ArgumentError{message: "normalise opts failed; got: 42"}}
+      {:error, %ArgumentError{message: "expected valid derivable opts; got: 42"}}
 
       iex> [a: nil, b: [:b1], c: [:c1, :c2, :c3]] |> opts_normalise
       {:ok, [a: nil, b: [:b1], c: [:c1, :c2, :c3]]}
@@ -254,7 +328,7 @@ defmodule Plymio.Option.Utility do
              end
         end.()
 
-      true -> {:error, %ArgumentError{message: "normalise opts failed; got: #{inspect value}"}}
+      true -> new_error_result(m: "expected valid derivable opts", v: value)
 
     end
 
@@ -275,7 +349,7 @@ defmodule Plymio.Option.Utility do
       ** (KeyError) key "a" not found in: %{:b => 2, :c => 3, "a" => 1}
 
       iex> 42 |> opts_normalise!
-      ** (ArgumentError) normalise opts failed; got: 42
+      ** (ArgumentError) expected valid derivable opts; got: 42
 
       iex> [a: nil, b: [:b1], c: [:c1, :c2, :c3]] |> opts_normalise!
       [a: nil, b: [:b1], c: [:c1, :c2, :c3]]
@@ -316,7 +390,7 @@ defmodule Plymio.Option.Utility do
       {:error, %KeyError{key: ["a"], term: %{:b => 2, :c => 3, "a" => 1}}}
 
       iex> 42 |> opts_normalise_map
-      {:error, %ArgumentError{message: "normalise opts failed; got: 42"}}
+      {:error, %ArgumentError{message: "expected valid derivable opts; got: 42"}}
 
   """
 
@@ -337,7 +411,7 @@ defmodule Plymio.Option.Utility do
           {:error, _} = result -> result
         end
 
-      true -> {:error, %ArgumentError{message: "normalise opts failed; got: #{inspect value}"}}
+      true -> new_error_result(m: "expected valid derivable opts", v: value)
 
     end
   end
@@ -360,7 +434,7 @@ defmodule Plymio.Option.Utility do
       ** (KeyError) key ["a"] not found in: %{:b => 2, :c => 3, "a" => 1}
 
       iex> 42 |> opts_normalise_map!
-      ** (ArgumentError) normalise opts failed; got: 42
+      ** (ArgumentError) expected valid derivable opts; got: 42
 
   """
 
@@ -404,7 +478,7 @@ defmodule Plymio.Option.Utility do
   def opts_validate(value) do
     case Keyword.keyword?(value) do
       true -> {:ok, value}
-      _  -> {:error, %ArgumentError{message: "validate opts failed; got: #{inspect value}"}}
+      _  -> new_error_result(m: "validate opts failed", v: value)
     end
   end
 
@@ -628,7 +702,7 @@ defmodule Plymio.Option.Utility do
   end
 
   @doc ~S"""
-  `opts_avoir_keys/2` takes an *opts* and a *keys list*.
+  `opts_avoir_keys/2` takes an *opts* and a *key spec*.
 
   If all of the keys are present in the `opts`, its returns `{:ok, opts}`.
 
@@ -1096,8 +1170,6 @@ defmodule Plymio.Option.Utility do
 
       {:error, {_present_opts, missing_keys}} ->
 
-        # missing_keys = unknown_opts |> Keyword.keys |> Enum.uniq
-
         raise KeyError, key: missing_keys, term: opts
 
     end
@@ -1146,6 +1218,623 @@ defmodule Plymio.Option.Utility do
 
         raise KeyError, key: missing_keys, term: opts
 
+    end
+
+  end
+
+  @doc ~S"""
+  `opts_filter/2` takes a *derivable opts*, together with a *tuple predicate* and returns `{:ok, opts}` where `opts` has all the 2tuples the *tuple predicate* return `true` for.
+
+  ## Examples
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter(&(&1))
+      {:ok, [a: 1, b: 2, c: 3]}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter(
+      ...>   fn
+      ...>   {:a,_} -> true
+      ...>   _ -> false
+      ...>   end)
+      {:ok, [a: 1]}
+
+      iex> %{a: 1, b: 2, c: 3} |> opts_filter(
+      ...>   fn
+      ...>   {:a,_} -> false
+      ...>   _ -> true
+      ...>   end)
+      {:ok, [b: 2, c: 3]}
+
+      iex> {:error, error} = [a: 1, b: 2, c: 3] |> opts_filter(:not_a_function)
+      ...> match?(%ArgumentError{message: "expected valid tuple predicate; got: :not_a_function"}, error)
+      true
+
+      iex> {:error, error} = :not_opts |> opts_filter(&(&1))
+      ...> match?(%ArgumentError{message: "expected valid derivable opts; got: :not_opts"}, error)
+      true
+
+  """
+
+  @spec opts_filter(any, any) :: {:ok, opts} | {:error, error}
+
+  def opts_filter(opts, fun_pred)  when is_function(fun_pred,1) do
+
+    with {:ok, opts} <- opts |> opts_normalise do
+
+      opts = opts
+      |> Enum.filter(fun_pred)
+
+      {:ok, opts}
+
+    else
+      {:error, _} = result -> result
+    end
+
+  end
+
+  def opts_filter(_opts, fun_pred)  do
+    new_error_result(m: "expected valid tuple predicate", v: fun_pred)
+  end
+
+  @doc ~S"""
+  `opts_filter!/2` calls `opts_filter/2` and if the result is `{:ok, opts}` returns `opts`.
+
+  ## Examples
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter!(&(&1))
+      [a: 1, b: 2, c: 3]
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter!(
+      ...>   fn
+      ...>   {:a,_} -> true
+      ...>   _ -> false
+      ...>   end)
+      [a: 1]
+
+      iex> %{a: 1, b: 2, c: 3} |> opts_filter!(
+      ...>   fn
+      ...>   {:a,_} -> false
+      ...>   _ -> true
+      ...>   end)
+      [b: 2, c: 3]
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter!(:not_a_function)
+      ** (ArgumentError) expected valid tuple predicate; got: :not_a_function
+
+      iex> :not_opts |> opts_filter!(&(&1))
+      ** (ArgumentError) expected valid derivable opts; got: :not_opts
+
+  """
+
+  @spec opts_filter!(any, any) :: opts | no_return
+
+  def opts_filter!(opts, dict) do
+    with {:ok, opts} <- opts |> opts_filter(dict) do
+      opts
+    else
+      {:error, error} -> raise error
+    end
+  end
+
+  @doc ~S"""
+  `opts_reject/2` takes a *derivable opts*, together with a *tuple predicate* and returns `{:ok, opts}` where `opts` has all the 2tuples the *tuple predicate* returns `false` for.
+
+  ## Examples
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject(&(&1))
+      {:ok, []}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject(
+      ...>   fn
+      ...>   {:a,_} -> true
+      ...>   _ -> false
+      ...>   end)
+      {:ok, [b: 2, c: 3]}
+
+      iex> %{a: 1, b: 2, c: 3} |> opts_reject(
+      ...>   fn
+      ...>   {:a,_} -> false
+      ...>   _ -> true
+      ...>   end)
+      {:ok, [a: 1]}
+
+      iex> {:error, error} = [a: 1, b: 2, c: 3] |> opts_reject(:not_a_function)
+      ...> match?(%ArgumentError{message: "expected valid tuple predicate; got: :not_a_function"}, error)
+      true
+
+      iex> {:error, error} = :not_opts |> opts_reject(&(&1))
+      ...> match?(%ArgumentError{message: "expected valid derivable opts; got: :not_opts"}, error)
+      true
+
+  """
+
+  @spec opts_reject(any, any) :: {:ok, opts} | {:error, error}
+
+  def opts_reject(opts, fun_pred)  when is_function(fun_pred,1) do
+
+    with {:ok, opts} <- opts |> opts_normalise do
+
+      opts = opts
+      |> Enum.reject(fun_pred)
+
+      {:ok, opts}
+
+    else
+      {:error, _} = result -> result
+    end
+
+  end
+
+  def opts_reject(_opts, fun_pred)  do
+    new_error_result(m: "expected valid tuple predicate", v: fun_pred)
+  end
+
+  @doc ~S"""
+  `opts_reject!/2` calls `opts_reject/2` and if the result is `{:ok, opts}` returns `opts`.
+
+  ## Examples
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject!(&(&1))
+      []
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject!(
+      ...>   fn
+      ...>   {:a,_} -> true
+      ...>   _ -> false
+      ...>   end)
+      [b: 2, c: 3]
+
+      iex> %{a: 1, b: 2, c: 3} |> opts_reject!(
+      ...>   fn
+      ...>   {:a,_} -> false
+      ...>   _ -> true
+      ...>   end)
+      [a: 1]
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject!(:not_a_function)
+      ** (ArgumentError) expected valid tuple predicate; got: :not_a_function
+
+      iex> :not_opts |> opts_reject!(&(&1))
+      ** (ArgumentError) expected valid derivable opts; got: :not_opts
+
+  """
+
+  @spec opts_reject!(any, any) :: opts | no_return
+
+  def opts_reject!(opts, dict) do
+    with {:ok, opts} <- opts |> opts_reject(dict) do
+      opts
+    else
+      {:error, error} -> raise error
+    end
+  end
+
+  @doc ~S"""
+  `opts_predicate/2` takes a *derivable opts*, together with a *tuple predicate* and returns `{:ok, opts}` if all the 2tuples pass the *tuple predicate*.
+
+  If any of the *opts* fail the *tuple predicate*, {:error, error} is returned where `error` will be a `KeyError` whose `key` field contains all the keys that failed.
+
+  ## Examples
+
+      iex> [a: 1, b: 2, c: 3] |> opts_predicate(&(&1))
+      {:ok, [a: 1, b: 2, c: 3]}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_predicate(fn {_k,v} -> v |> is_integer end)
+      {:ok, [a: 1, b: 2, c: 3]}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_predicate(
+      ...>   fn
+      ...>   {:a,_} -> true
+      ...>   _ -> false
+      ...>   end)
+      {:error, %KeyError{key: [:b, :c], term: [a: 1, b: 2, c: 3]}}
+
+      iex> {:error, error} = [a: 1, b: 2, c: 3] |> opts_predicate(:not_a_function)
+      ...> match?(%ArgumentError{message: "expected valid tuple predicate; got: :not_a_function"}, error)
+      true
+
+      iex> {:error, error} = :not_opts |> opts_predicate(&(&1))
+      ...> match?(%ArgumentError{message: "expected valid derivable opts; got: :not_opts"}, error)
+      true
+
+  """
+
+  @spec opts_predicate(any, any) :: {:ok, opts} | {:error, error}
+
+  def opts_predicate(opts, fun_pred)  when is_function(fun_pred,1) do
+
+    with {:ok, norm_opts} <- opts |> opts_normalise do
+
+      norm_opts
+      |> Enum.split_with(fun_pred)
+      |> case do
+
+           {pass_opts, []} -> {:ok, pass_opts}
+
+           {_pass_opts, fail_opts} ->
+
+             # build a KeyError with failing keys
+             fail_keys = fail_opts |> Keyword.keys |> Enum.uniq
+
+             {:error, %KeyError{key: fail_keys, term: opts}}
+
+         end
+
+    else
+      {:error, _} = result -> result
+    end
+
+  end
+
+  def opts_predicate(_opts, fun_pred)  do
+    new_error_result(m: "expected valid tuple predicate", v: fun_pred)
+  end
+
+  @doc ~S"""
+  `opts_predicate!/2` calls `opts_predicate/2` and if the result is `{:ok, opts}` returns `opts`.
+
+  ## Examples
+
+      iex> [a: 1, b: 2, c: 3] |> opts_predicate(&(&1))
+      {:ok, [a: 1, b: 2, c: 3]}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_predicate(fn {_k,v} -> v |> is_integer end)
+      {:ok, [a: 1, b: 2, c: 3]}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_predicate(
+      ...>   fn
+      ...>   {:a,_} -> true
+      ...>   _ -> false
+      ...>   end)
+      {:error, %KeyError{key: [:b, :c], term: [a: 1, b: 2, c: 3]}}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_predicate!(:not_a_function)
+      ** (ArgumentError) expected valid tuple predicate; got: :not_a_function
+
+      iex> :not_opts |> opts_predicate!(&(&1))
+      ** (ArgumentError) expected valid derivable opts; got: :not_opts
+
+  """
+
+  @spec opts_predicate!(any, any) :: opts | no_return
+
+  def opts_predicate!(opts, dict) do
+    with {:ok, opts} <- opts |> opts_predicate(dict) do
+      opts
+    else
+      {:error, error} -> raise error
+    end
+  end
+
+  @doc ~S"""
+  `opts_filter_keys/2` takes a *derivable opts* and a *key spec* and returns `{:ok, opts}` where `opts` has all keys from the original *derivable opts* that appear in the *key spec*.
+
+  ## Examples
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter_keys([:a, :b, :c])
+      {:ok, [a: 1, b: 2, c: 3]}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter_keys([b: :want_b, c: :and_c])
+      {:ok, [b: 2, c: 3]}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter_keys(%{a: 42, b: nil})
+      {:ok, [a: 1, b: 2]}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter_keys(:not_a_key_spec)
+      {:error, %ArgumentError{message: "expected enum; got: :not_a_key_spec"}}
+
+      iex> :not_opts |> opts_filter_keys([:a, :b, :c])
+      {:error, %ArgumentError{message: "expected valid derivable opts; got: :not_opts"}}
+
+  """
+
+  @spec opts_filter_keys(any, any) :: {:ok, opts} | {:error, error}
+
+  def opts_filter_keys(opts, keys)
+
+  def opts_filter_keys(opts, keys) do
+
+    with {:ok, filter_keys} <- keys |> normalise_key_spec do
+
+      filter_map = filter_keys |> Map.new(fn k -> {k, nil} end)
+
+      filter_pred = fn {k,_v} -> filter_map |> Map.has_key?(k) end
+
+      with {:ok, _filter_opts} = result <- opts |> opts_filter(filter_pred) do
+        result
+      else
+        {:error, _} = result -> result
+      end
+
+    else
+      {:error, _} = result -> result
+    end
+
+  end
+
+  @doc ~S"""
+  `opts_filter_keys!/2` calls `opts_filter_keys/2` and if the result is `{:ok, opts}`, returns `opts`.
+
+  ## Examples
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter_keys!([:a, :b, :c])
+      [a: 1, b: 2, c: 3]
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter_keys!([b: :want_b, c: :and_c])
+      [b: 2, c: 3]
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter_keys!(%{a: 42, b: nil})
+      [a: 1, b: 2]
+
+      iex> [a: 1, b: 2, c: 3] |> opts_filter_keys!(:not_a_key_spec)
+      ** (ArgumentError) expected enum; got: :not_a_key_spec
+
+      iex> :not_opts |> opts_filter_keys!([:a, :b, :c])
+      ** (ArgumentError) expected valid derivable opts; got: :not_opts
+
+  """
+
+  @spec opts_filter_keys!(any, any) :: opts | no_return
+
+  def opts_filter_keys!(opts, keys) do
+    case opts_filter_keys(opts, keys) do
+      {:ok, opts} -> opts
+      {:error, error} -> raise error
+    end
+
+  end
+
+  @doc ~S"""
+  `opts_reject_keys/2` takes a *derivable opts* and a *key spec* and returns `{:ok, opts}` where `opts` has all keys from the original *derivable opts* that **do not** appear in the *key spec*.
+
+  ## Examples
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject_keys([:a, :b, :c])
+      {:ok, []}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject_keys([b: "b value", c: :dont_want_this_key])
+      {:ok, [a: 1]}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject_keys(%{a: nil, b: nil})
+      {:ok, [c: 3]}
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject_keys(:not_a_key_spec)
+      {:error, %ArgumentError{message: "expected enum; got: :not_a_key_spec"}}
+
+      iex> :not_opts |> opts_reject_keys([:a, :b, :c])
+      {:error, %ArgumentError{message: "expected valid derivable opts; got: :not_opts"}}
+
+  """
+
+  @spec opts_reject_keys(any, any) :: {:ok, opts} | {:error, error}
+
+  def opts_reject_keys(opts, keys)
+
+  def opts_reject_keys(opts, keys) do
+
+    with {:ok, reject_keys} <- keys |> normalise_key_spec do
+
+      reject_map = reject_keys |> Map.new(fn k -> {k, nil} end)
+
+      reject_pred = fn {k,_v} -> reject_map |> Map.has_key?(k) end
+
+      with {:ok, _reject_opts} = result <- opts |> opts_reject(reject_pred) do
+        result
+      else
+        {:error, _} = result -> result
+      end
+
+    else
+      {:error, _} = result -> result
+    end
+
+  end
+
+  @doc ~S"""
+  `opts_reject_keys!/2` calls `opts_reject_keys/2` and if the result is `{:ok, opts}`, returns `opts`.
+
+  ## Examples
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject_keys!([:a, :b, :c])
+      []
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject_keys!([b: "b value", c: :dont_want_this_key])
+      [a: 1]
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject_keys!(%{a: nil, b: nil})
+      [c: 3]
+
+      iex> [a: 1, b: 2, c: 3] |> opts_reject_keys!(:not_a_key_spec)
+      ** (ArgumentError) expected enum; got: :not_a_key_spec
+
+      iex> :not_opts |> opts_reject_keys!([:a, :b, :c])
+      ** (ArgumentError) expected valid derivable opts; got: :not_opts
+
+  """
+
+  @spec opts_reject_keys!(any, any) :: opts | no_return
+
+  def opts_reject_keys!(opts, keys) do
+    case opts_reject_keys(opts, keys) do
+      {:ok, opts} -> opts
+      {:error, error} -> raise error
+    end
+
+  end
+
+  @doc ~S"""
+  `opts_fetch_key_values/2` takes a *derivable opts* and a *key* and returns the values of the *key* as `{:ok, values}` where `values` will be a list.
+
+  One of more indices can be provided to select the values at specific indices; the default is to return all values from `Keyword.get_values/2`.
+
+  Note indices *must* be relative to the result of `Keyword.get_values/2` **not** the indices of the original *opts*
+
+  Values are returned in the same order as the indices. Indices may be repeated. Indices are validated; asking for an unknown/impossible index will cause an error.
+
+  ## Examples
+
+  The default is to return *all* the values for a *key* i.e same as `Keyword.get_values/2`:
+
+      iex> [a: 1, b: 2, c: 3] |> opts_fetch_key_values(:a)
+      {:ok, [1]}
+
+  This examples show multiple values being returned:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values(:a)
+      {:ok, [11, 12, 13]}
+
+  Here the last value for the key is returned:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values(:a, -1)
+      {:ok, [13]}
+
+  Here only the first value is wanted:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values(:a, 0)
+      {:ok, [11]}
+
+  Values at different indices:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values(:a, [1,-1])
+      {:ok, [12, 13]}
+
+  Note order of the values is same order as the indices:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values(:a, [-2,0,-1])
+      {:ok, [12, 11, 13]}
+
+  The same index/indices can be repeated:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values(:a, [-2,0,-2,-1,0])
+      {:ok, [12, 11, 12, 13, 11]}
+
+  Indices are validated:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values(:a, 99)
+      {:error, %ArgumentError{message: "index invalid; got: 99"}}
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values(:a, :not_an_index)
+      {:error, %ArgumentError{message: "index invalid; got: :not_an_index"}}
+
+  """
+
+  @spec opts_fetch_key_values(any, any) :: {:ok, opts} | {:error, error}
+
+  def opts_fetch_key_values(opts, key, indicies \\ nil)
+
+  def opts_fetch_key_values(opts, key, nil) do
+
+    with {:ok, norm_opts} <- opts |> opts_normalise,
+         true <- norm_opts |> Keyword.has_key?(key) do
+      {:ok, norm_opts |> Keyword.get_values(key)}
+    else
+      false -> new_key_error_result(key, opts)
+    {:error, _} = result -> result
+    end
+
+  end
+
+  def opts_fetch_key_values(opts, key, indices) do
+
+    with {:ok, norm_opts} <- opts |> opts_normalise,
+         true <- norm_opts |> Keyword.has_key?(key) do
+
+      key_values = norm_opts |> Keyword.get_values(key)
+
+      with {:ok, indices} <- key_values |> opts_indices_validate(indices) do
+
+        indices
+        |> List.wrap
+        |> Enum.reduce({[],[]},
+        fn index, {known_values,missing_indices} ->
+
+          with {:ok, value} <- key_values |> Enum.fetch(index) do
+            {[value | known_values], missing_indices}
+          else
+            :error -> {known_values, [index | missing_indices]}
+          end
+
+        end)
+        |> case do
+
+             {known_values, []} -> {:ok, known_values |> Enum.reverse}
+             {_known_values, missing_indices} ->
+
+               new_key_error_result(missing_indices, key_values)
+
+           end
+
+      else
+        {:error, _} = result -> result
+      end
+
+    else
+      false -> new_key_error_result(key, opts)
+      {:error, _} = result -> result
+    end
+
+  end
+
+  @doc ~S"""
+  `opts_fetch_key_values!/2` takes a *derivable opts* and a *key* and returns the values of the *key* as `{:ok, values}`.
+
+  One of more indices can be provided to select the values at specific indices; the default is to return all values from `Keyword.get_values/2`.
+
+  Note indices *must* be relative to the result of `Keyword.get_values/2` **not** the indices of the original *opts*
+
+  Values are returned in the order they are given in the indices. Indices may be repeated.
+
+  ## Examples
+
+  The default is to return *all* the values for a *key*:
+
+      iex> [a: 1, b: 2, c: 3] |> opts_fetch_key_values!(:a)
+      [1]
+
+  This examples show multiple values being returned:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values!(:a)
+      [11, 12, 13]
+
+  Here the last value for the key is returned:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values!(:a, -1)
+      [13]
+
+  Here the first value is wanted:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values!(:a, 0)
+      [11]
+
+  Values at different indices:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values!(:a, [1,-1])
+      [12, 13]
+
+  Note order of the values is same as order of the indices
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values!(:a, [-2,0,-1])
+      [12, 11, 13]
+
+  The same index/indices can be requested more than once:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values!(:a, [-2,0,-2,-1,0])
+      [12, 11, 12, 13, 11]
+
+  Indices are validated:
+
+      iex> [a: 11, b: 2, a: 12, c: 3, a: 13] |> opts_fetch_key_values!(:a, :not_an_index)
+      ** (ArgumentError) index invalid; got: :not_an_index
+
+  """
+
+  @spec opts_fetch_key_values!(any, any, any) :: list | no_return
+
+  def opts_fetch_key_values!(opts, key, indices \\ nil)
+
+  def opts_fetch_key_values!(opts, key, indices) do
+    case opts_fetch_key_values(opts, key, indices) do
+      {:ok, values} -> values
+      {:error, error} -> raise error
     end
 
   end
@@ -1405,6 +2094,77 @@ defmodule Plymio.Option.Utility do
     |> List.flatten
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq
+  end
+
+  defp normalise_error_message(value)
+
+  defp normalise_error_message(value) when is_binary(value) do
+    value
+  end
+
+  defp normalise_error_message(value) when is_atom(value) do
+    value |> to_string
+  end
+
+  defp normalise_error_message(value) do
+    value |> inspect
+  end
+
+  defp normalise_error_value(value)
+
+  defp normalise_error_value(value) do
+    "got: #{value |> inspect}"
+  end
+
+  defp new_error_result(opts)
+
+  defp new_error_result(opts) do
+
+    message = [
+      m: &normalise_error_message/1,
+      v: &normalise_error_value/1,
+    ]
+    |> Enum.reduce([],fn {k,fun}, texts ->
+
+      opts
+      |> Keyword.has_key?(k)
+      |> case do
+
+           true ->
+
+             text = opts |> Keyword.get(k) |> fun.()
+
+             [text | texts]
+
+           _ -> texts
+
+         end
+
+    end)
+    |> Enum.reverse
+    |> Enum.join("; ")
+
+    {:error, %ArgumentError{message: message}}
+
+  end
+
+  defp new_key_error(values, term) do
+
+    cond do
+      Keyword.keyword?(values) -> values |> Keyword.keys
+      is_list(values) -> values
+      true -> raise ArgumentError, message: "expected opts or keys; got: #{inspect values}"
+    end
+    |> Enum.uniq
+    |> case do
+         [key] -> %KeyError{key: key, term: term}
+         keys -> %KeyError{key: keys, term: term}
+       end
+
+  end
+
+  defp new_key_error_result(values, term) do
+    {:error, new_key_error(values, term)}
   end
 
 end

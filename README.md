@@ -7,7 +7,7 @@
 Add **plymio\_option** to your list of dependencies in <span class="underline">mix.exs</span>:
 
     def deps do
-      [{:plymio_option, "~> 0.2.0"}]
+      [{:plymio_option, "~> 0.3.0"}]
     end
 
 ## Examples

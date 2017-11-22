@@ -1,7 +1,7 @@
 defmodule Plymio.Option.Mixfile do
   use Mix.Project
 
-  @version "0.2.0"
+  @version "0.3.0"
 
   def project do
     [app: :plymio_option,
@@ -11,6 +11,7 @@ defmodule Plymio.Option.Mixfile do
      source_url: "https://github.com/ianrumford/plymio_option",
      homepage_url: "https://github.com/ianrumford/plymio_option",
      docs: [extras: ["./README.md", "./CHANGELOG.md"]],
+     elixirc_paths: elixirc_paths(Mix.env),
      elixir: "~> 1.5",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
@@ -26,6 +27,9 @@ defmodule Plymio.Option.Mixfile do
       {:ex_doc, "~> 0.18", only: :dev}
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib"]
+  defp elixirc_paths(_),     do: ["lib"]
 
   defp package do
     [maintainers: ["Ian Rumford"],

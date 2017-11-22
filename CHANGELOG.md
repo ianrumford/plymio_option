@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## v0.3.0
+
+### 1. Bug Fixes
+
+Minor documentation fixes.
+
+Exception message "normalise opts failed" from `opts_normalise/2` and other functions changed to "expected valid derivable opts".
+
+### 2. New Functions
+
+These new functions have been added:
+
+`opts_predicate/2` and `opts_predicate!/2`
+
+`opts_filter/2` and `opts_filter!/2`
+
+`opts_reject/2` and `opts_reject!/2`
+
+`opts_filter_keys/2` and `opts_filter_keys!/2`
+
+`opts_reject_keys/2` and `opts_reject_keys!/2`
+
+`opts_fetch_keys/3` and `opts_fetch_keys!/3`
+
 ## v0.2.0
 
 New functions have been introduced to adopt a "standard" API that returns either `{:ok, value}` or {`:error, error}` where `error` is an `Exception`.  The bang functions raise the `error`.
